@@ -1,0 +1,9 @@
+{
+  "name": "City Dash Controller",
+  "short_name": "City Dash",
+  "start_url": "pad.html",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#3aa0ff",
+  "theme_color": "#3aa0ff"
+}
