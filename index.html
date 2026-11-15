@@ -292,7 +292,7 @@ function startNet(code){
   });
   peer.on('disconnected',()=>setTimeout(()=>{ if(!peer.destroyed) peer.reconnect(); },1500));
   peer.on('connection',c=>{
-    c.on('open',()=>{ if(conn&&conn!==c) try{conn.close()}catch(_){}; conn=c; seenAt=performance.now(); popup('📱 CONTROLLER CONNECTED'); push(''); });
+    c.on('open',()=>{ if(conn&&conn!==c) try{conn.close()}catch(_){}; if(!conn||!conn.open) qrBurst(); conn=c; seenAt=performance.now(); popup('📱 CONTROLLER CONNECTED'); push(''); });
     c.on('data',d=>{ seenAt=performance.now(); if(d&&d.lane!=null) ctrl.lane=d.lane;
       for(const e of (d&&d.ev)||[]){ if(e==='jump') doJump(); else if(e==='roll') doRoll(); } });
     c.on('close',()=>{ if(conn===c) conn=null; });
@@ -322,6 +322,41 @@ function sfx(k){
   else if(k==='close') tone(1200,1800,.12,'sine',.08);
 }
 
+// ---- QR "scan" burst: when the phone connects, the QR's dark modules fly out of the screen toward the viewer ----
+function qrBurst(){
+  const src=$('qr').querySelector('canvas'); const box=$('qr').getBoundingClientRect();
+  if(!src||!box.width) return;
+  const cv=document.createElement('canvas'), dpr=Math.min(2,devicePixelRatio||1);
+  cv.width=innerWidth*dpr; cv.height=innerHeight*dpr;
+  cv.style.cssText='position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:50';
+  document.body.appendChild(cv); const g=cv.getContext('2d'); g.scale(dpr,dpr);
+  const sx=src.getContext('2d').getImageData(0,0,src.width,src.height).data;
+  const N=37, cell=src.width/N, pad=14, inner=box.width-2*pad, step=inner/N;
+  const cx=box.left+box.width/2, cy=box.top+box.height/2, tiles=[];
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+    const k=(Math.floor((j+.5)*cell)*src.width+Math.floor((i+.5)*cell))*4;
+    if(sx[k]+sx[k+1]+sx[k+2]>380) continue;                       // light module: skip
+    tiles.push({x:box.left+pad+i*step, y:box.top+pad+j*step, d:Math.random()*.25, sp:.75+Math.random()*.5, r:(Math.random()-.5)*4});
+  }
+  const t0=performance.now(), T=1200, ease=u=>1-Math.pow(1-u,3);
+  function draw(now){
+    const t=(now-t0)/T; g.clearRect(0,0,innerWidth,innerHeight);
+    // white card zooms toward the viewer and fades
+    const cz=1-.85*ease(Math.min(1,t*1.6));
+    if(t<.62){ g.globalAlpha=Math.max(0,1-t*1.6); const w=box.width/cz; g.fillStyle='#fff'; g.fillRect(cx-w/2,cy-w/2,w,w); }
+    for(const q of tiles){
+      const u=Math.min(1,Math.max(0,(t-q.d)/(.75*q.sp))); if(u<=0){ g.globalAlpha=1; g.fillStyle='#1d3557'; g.fillRect(q.x,q.y,step,step); continue; }
+      const z=1-.94*ease(u), x=cx+(q.x+step/2-cx)/z, y=cy+(q.y+step/2-cy)/z, w=step/z;
+      g.globalAlpha=Math.max(0,1-Math.pow(u,2.2)); g.fillStyle=u<.5?'#1d3557':'#3a6fd8';
+      g.save(); g.translate(x,y); g.rotate(q.r*u); g.fillRect(-w/2,-w/2,w,w); g.restore();
+    }
+    g.globalAlpha=1;
+    if(t<1.15) requestAnimationFrame(draw); else cv.remove();
+  }
+  requestAnimationFrame(draw);
+  const f=$('flash'); f.style.opacity=.55; setTimeout(()=>f.style.opacity=0,180);
+}
+if(/[?&]qrtest/.test(location.search)) setTimeout(()=>{ if($('qr').querySelector('canvas')) qrBurst(); },4000);
 // ---------------- main loop ----------------
 let last=performance.now(), fpsN=0, fpsT=performance.now(), quality=TV?1:2;
 function frame(now){
